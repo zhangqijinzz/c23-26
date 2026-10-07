@@ -5,11 +5,15 @@ export function InspectionModule({
   issues,
   vm,
   selectedId,
+  scoped,
+  scopedCueCount,
 }: {
   cues: SubtitleCue[];
   issues: SubtitleIssue[];
   vm: SubtitleMeterViewModel;
   selectedId: string | null;
+  scoped: boolean;
+  scopedCueCount: number;
 }) {
   const selected = cues.find((cue) => cue.id === selectedId) ?? cues[0];
   const errors = issues.filter((issue) => issue.severity === "error").length;
@@ -34,6 +38,12 @@ export function InspectionModule({
           <span className="warning-color">{warnings} 提醒</span>
         </div>
       </div>
+      {scoped && (
+        <div className="scope-note">
+          已限定为选中区间 · 区间内 {scopedCueCount} 条字幕 ·
+          条目按开始时间归属区间
+        </div>
+      )}
       <div className="issue-list">
         {issues.length ? (
           issues.map((issue) => (
@@ -52,7 +62,9 @@ export function InspectionModule({
             </button>
           ))
         ) : (
-          <div className="clear-state">✓ 当前未发现明显问题</div>
+          <div className="clear-state">
+            ✓ {scoped ? "选区内未发现问题" : "当前未发现明显问题"}
+          </div>
         )}
       </div>
       {selected && (

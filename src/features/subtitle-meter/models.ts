@@ -20,6 +20,11 @@ export interface SubtitleIssue {
   severity: "info" | "warning" | "error";
   message: string;
 }
+export interface TimeRange {
+  id: string;
+  startMs: number;
+  endMs: number;
+}
 export interface SubtitleProject {
   id: string;
   name: string;
@@ -40,6 +45,7 @@ export interface MeterState {
   selectedId: string | null;
   notice: string;
   zoom: number;
+  ranges: TimeRange[];
 }
 export const emptyState = (): MeterState => ({
   phase: "empty",
@@ -48,4 +54,5 @@ export const emptyState = (): MeterState => ({
   selectedId: null,
   notice: "",
   zoom: 1,
+  ranges: [],
 });

@@ -1,4 +1,5 @@
 import { detectIssues } from "../analyzers/issueDetector";
+import { filterCuesByRanges, mergeRanges } from "../analyzers/rangeFilter";
 import { formatSubtitles } from "../formatters/subtitleFormatter";
 import {
   emptyState,
@@ -14,6 +15,7 @@ import { readTextFile } from "../services/fileService";
 export class SubtitleMeterViewModel {
   state: MeterState = emptyState();
   private listeners = new Set<() => void>();
+  private rangeSeq = 0;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -50,6 +52,7 @@ export class SubtitleMeterViewModel {
           issues: detectIssues(project.cues),
           phase: "ready",
           selectedId: project.cues[0]?.id ?? null,
+          ranges: [],
           notice: "已恢复上次编辑",
         });
     } catch {
@@ -72,6 +75,7 @@ export class SubtitleMeterViewModel {
       };
       this.publish({
         selectedId: cues[0].id,
+        ranges: [],
         notice: `已解析 ${cues.length} 条字幕`,
       });
       await this.commit(project, "ready");
@@ -85,6 +89,30 @@ export class SubtitleMeterViewModel {
   }
   selectCue(id: string) {
     this.publish({ selectedId: id });
+  }
+  addRange(startMs: number, endMs: number) {
+    const start = Math.min(startMs, endMs),
+      end = Math.max(startMs, endMs);
+    if (end - start < 1) return;
+    const ranges = mergeRanges([
+      ...this.state.ranges,
+      { id: `range-${++this.rangeSeq}`, startMs: start, endMs: end },
+    ]);
+    this.publish({
+      ranges,
+      notice: `检查范围已限定为 ${ranges.length} 个区间，统计与导出将只覆盖选区`,
+    });
+  }
+  removeRange(id: string) {
+    const ranges = this.state.ranges.filter((range) => range.id !== id);
+    this.publish({
+      ranges,
+      notice: ranges.length ? "" : "已恢复全片检查范围",
+    });
+  }
+  clearRanges() {
+    if (!this.state.ranges.length) return;
+    this.publish({ ranges: [], notice: "已恢复全片检查范围" });
   }
   setZoom(zoom: number) {
     this.publish({ zoom });
@@ -129,6 +157,38 @@ export class SubtitleMeterViewModel {
       formatSubtitles(project.cues, project.format);
       downloadSubtitles(project.name, project.cues, project.format);
       this.publish({ phase: "ready", notice: "字幕文件已导出" });
+    } catch {
+      this.publish({
+        phase: "error",
+        notice: "导出失败，编辑内容已保留，请重试",
+      });
+    }
+  }
+  async exportSelection() {
+    const project = this.state.project;
+    if (!project || !this.state.ranges.length) return;
+    const cues = filterCuesByRanges(project.cues, this.state.ranges);
+    if (!cues.length) {
+      this.publish({ notice: "选中区间内没有字幕条目，无法导出" });
+      return;
+    }
+    this.publish({ phase: "exporting" });
+    try {
+      const renumbered = cues.map((cue, i) => ({
+        ...cue,
+        id: `cue-${i + 1}`,
+        index: i + 1,
+      }));
+      formatSubtitles(renumbered, project.format);
+      downloadSubtitles(
+        `${project.name.replace(/\.(srt|vtt)$/i, "")}-selection`,
+        renumbered,
+        project.format,
+      );
+      this.publish({
+        phase: "ready",
+        notice: `已导出选区内 ${cues.length} 条字幕，编号从 1 重新编排`,
+      });
     } catch {
       this.publish({
         phase: "error",

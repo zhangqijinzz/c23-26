@@ -1,4 +1,8 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import {
+  filterCuesByRanges,
+  filterIssuesByRanges,
+} from "../analyzers/rangeFilter";
 import { ImportModule } from "../components/ImportModule";
 import { InspectionModule } from "../components/InspectionModule";
 import { PreviewModule } from "../components/PreviewModule";
@@ -25,6 +29,12 @@ export function SubtitleMeter() {
   const selected =
     project?.cues.find((cue) => cue.id === state.selectedId) ??
     project?.cues[0];
+  const scopedCues = project
+      ? filterCuesByRanges(project.cues, state.ranges)
+      : [],
+    visibleIssues = project
+      ? filterIssuesByRanges(state.issues, project.cues, state.ranges)
+      : [];
 
   const loadDemo = () => {
     const content =
@@ -99,8 +109,8 @@ export function SubtitleMeter() {
               <strong>{tab.label}</strong>
               <small>{tab.hint}</small>
             </span>
-            {tab.id === "inspection" && project && state.issues.length > 0 && (
-              <span className="tab-count">{state.issues.length}</span>
+            {tab.id === "inspection" && project && visibleIssues.length > 0 && (
+              <span className="tab-count">{visibleIssues.length}</span>
             )}
           </button>
         ))}
@@ -161,9 +171,10 @@ export function SubtitleMeter() {
                 vm={vm}
                 selectedId={state.selectedId}
                 zoom={state.zoom}
+                ranges={state.ranges}
               />
               <p className="page-tip">
-                选中字幕块可在「问题检查」中编辑文本与精确时间；拖动时间块可整体调整时段。
+                选中字幕块可在「问题检查」中编辑文本与精确时间；拖动时间块可整体调整时段；在轨道空白处横向拖动可框选检查区间。
               </p>
             </div>
           ) : (
@@ -177,9 +188,11 @@ export function SubtitleMeter() {
             <div className="module-page inspection-page">
               <InspectionModule
                 cues={project.cues}
-                issues={state.issues}
+                issues={visibleIssues}
                 vm={vm}
                 selectedId={state.selectedId}
+                scoped={state.ranges.length > 0}
+                scopedCueCount={scopedCues.length}
               />
               <PreviewModule cue={selected} />
             </div>
@@ -196,13 +209,15 @@ export function SubtitleMeter() {
                 project={project}
                 vm={vm}
                 phase={state.phase}
+                ranges={state.ranges}
+                scopedCount={scopedCues.length}
               />
               <section className="module delivery-summary">
                 <span className="module-kicker">EXPORT CHECK</span>
                 <strong>
-                  {state.issues.length === 0
+                  {visibleIssues.length === 0
                     ? "校对完成，可以导出"
-                    : `还有 ${state.issues.length} 项问题待查看`}
+                    : `还有 ${visibleIssues.length} 项问题待查看`}
                 </strong>
                 <button onClick={() => setActiveTab("inspection")}>
                   查看检查结果 <span>→</span>
