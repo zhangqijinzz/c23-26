@@ -1,4 +1,5 @@
 import { detectIssues } from "../analyzers/issueDetector";
+import { cuesInRanges } from "../analyzers/rangeScope";
 import { formatSubtitles } from "../formatters/subtitleFormatter";
 import {
   emptyState,
@@ -6,6 +7,7 @@ import {
   type MeterState,
   type SubtitleCue,
   type SubtitleProject,
+  type TimeRange,
 } from "../models";
 import { detectFormat, parseSubtitles } from "../parsers/subtitleParser";
 import { projectRepository } from "../repositories/projectRepository";
@@ -14,6 +16,7 @@ import { readTextFile } from "../services/fileService";
 export class SubtitleMeterViewModel {
   state: MeterState = emptyState();
   private listeners = new Set<() => void>();
+  private rangeSeq = 0;
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -73,6 +76,7 @@ export class SubtitleMeterViewModel {
       this.publish({
         selectedId: cues[0].id,
         notice: `已解析 ${cues.length} 条字幕`,
+        ranges: [],
       });
       await this.commit(project, "ready");
     } catch (error) {
@@ -85,6 +89,33 @@ export class SubtitleMeterViewModel {
   }
   selectCue(id: string) {
     this.publish({ selectedId: id });
+  }
+  addRange(startMs: number, endMs: number) {
+    const start = Math.max(0, Math.min(startMs, endMs)),
+      end = Math.max(startMs, endMs);
+    if (end - start < 1) return;
+    const sorted = [
+      ...this.state.ranges,
+      {
+        id: `range-${Date.now()}-${this.rangeSeq++}`,
+        startMs: start,
+        endMs: end,
+      },
+    ].sort((a, b) => a.startMs - b.startMs || a.endMs - b.endMs);
+    const merged: TimeRange[] = [];
+    for (const range of sorted) {
+      const last = merged.at(-1);
+      if (last && range.startMs <= last.endMs)
+        last.endMs = Math.max(last.endMs, range.endMs);
+      else merged.push({ ...range });
+    }
+    this.publish({ ranges: merged });
+  }
+  removeRange(id: string) {
+    this.publish({ ranges: this.state.ranges.filter((r) => r.id !== id) });
+  }
+  clearRanges() {
+    if (this.state.ranges.length) this.publish({ ranges: [] });
   }
   setZoom(zoom: number) {
     this.publish({ zoom });
@@ -129,6 +160,37 @@ export class SubtitleMeterViewModel {
       formatSubtitles(project.cues, project.format);
       downloadSubtitles(project.name, project.cues, project.format);
       this.publish({ phase: "ready", notice: "字幕文件已导出" });
+    } catch {
+      this.publish({
+        phase: "error",
+        notice: "导出失败，编辑内容已保留，请重试",
+      });
+    }
+  }
+  async exportRange(id: string) {
+    const project = this.state.project;
+    if (!project) return;
+    const index = this.state.ranges.findIndex((range) => range.id === id),
+      range = this.state.ranges[index];
+    if (!range) return;
+    const cues = cuesInRanges(project.cues, [range]);
+    if (!cues.length) {
+      this.publish({ notice: `区间 ${index + 1} 内没有字幕条目，无法导出` });
+      return;
+    }
+    this.publish({ phase: "exporting" });
+    try {
+      formatSubtitles(cues, project.format);
+      downloadSubtitles(
+        project.name,
+        cues,
+        project.format,
+        `range${index + 1}`,
+      );
+      this.publish({
+        phase: "ready",
+        notice: `已导出区间 ${index + 1}（${cues.length} 条字幕）`,
+      });
     } catch {
       this.publish({
         phase: "error",

@@ -1,13 +1,17 @@
-import type { Format, SubtitleProject } from "../models";
+import { cuesInRanges } from "../analyzers/rangeScope";
+import type { Format, SubtitleProject, TimeRange } from "../models";
+import { formatTimestamp } from "../parsers/timecode";
 import type { SubtitleMeterViewModel } from "../viewmodels/subtitleMeterViewModel";
 export function VersionExportModule({
   project,
   vm,
   phase,
+  ranges,
 }: {
   project: SubtitleProject;
   vm: SubtitleMeterViewModel;
   phase: string;
+  ranges: TimeRange[];
 }) {
   return (
     <section className="module version-module">
@@ -64,9 +68,39 @@ export function VersionExportModule({
           disabled={phase === "exporting"}
           onClick={() => void vm.exportFile()}
         >
-          导出字幕 <span>↓</span>
+          {ranges.length ? "导出全片字幕" : "导出字幕"} <span>↓</span>
         </button>
       </div>
+      {ranges.length > 0 && (
+        <div className="range-export">
+          <div className="range-export-head">
+            <strong>按区间导出</strong>
+            <small>仅含与区间时间交叠的条目，序号从 1 重排</small>
+          </div>
+          {ranges.map((range, i) => {
+            const count = cuesInRanges(project.cues, [range]).length;
+            return (
+              <div key={range.id} className="range-export-row">
+                <div>
+                  <strong>区间 {i + 1}</strong>
+                  <small>
+                    {formatTimestamp(range.startMs, project.format)} –{" "}
+                    {formatTimestamp(range.endMs, project.format)} ·{" "}
+                    {count ? `${count} 条字幕` : "无字幕条目，不可导出"}
+                  </small>
+                </div>
+                <button
+                  className="secondary-button"
+                  disabled={!count || phase === "exporting"}
+                  onClick={() => void vm.exportRange(range.id)}
+                >
+                  导出区间 ↓
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <p className="privacy-note">字幕文件与项目版本仅保存在当前浏览器</p>
     </section>
   );

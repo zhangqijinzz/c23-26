@@ -1,17 +1,21 @@
-import type { SubtitleCue, SubtitleIssue } from "../models";
+import { cuesInRanges } from "../analyzers/rangeScope";
+import type { SubtitleCue, SubtitleIssue, TimeRange } from "../models";
 import type { SubtitleMeterViewModel } from "../viewmodels/subtitleMeterViewModel";
 export function InspectionModule({
   cues,
   issues,
   vm,
   selectedId,
+  ranges,
 }: {
   cues: SubtitleCue[];
   issues: SubtitleIssue[];
   vm: SubtitleMeterViewModel;
   selectedId: string | null;
+  ranges: TimeRange[];
 }) {
   const selected = cues.find((cue) => cue.id === selectedId) ?? cues[0];
+  const scopedCount = ranges.length ? cuesInRanges(cues, ranges).length : 0;
   const errors = issues.filter((issue) => issue.severity === "error").length;
   const warnings = issues.filter(
     (issue) => issue.severity === "warning",
@@ -34,6 +38,15 @@ export function InspectionModule({
           <span className="warning-color">{warnings} 提醒</span>
         </div>
       </div>
+      {ranges.length > 0 && (
+        <div className="scope-banner">
+          <span>
+            检查范围：{ranges.length} 个区间 · {scopedCount} / {cues.length}{" "}
+            条字幕
+          </span>
+          <button onClick={() => vm.clearRanges()}>清除选区 ✕</button>
+        </div>
+      )}
       <div className="issue-list">
         {issues.length ? (
           issues.map((issue) => (
@@ -52,7 +65,9 @@ export function InspectionModule({
             </button>
           ))
         ) : (
-          <div className="clear-state">✓ 当前未发现明显问题</div>
+          <div className="clear-state">
+            {ranges.length ? "✓ 选中区间内未发现问题" : "✓ 当前未发现明显问题"}
+          </div>
         )}
       </div>
       {selected && (

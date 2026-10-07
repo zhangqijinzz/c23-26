@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { issuesInRanges } from "../analyzers/rangeScope";
 import { ImportModule } from "../components/ImportModule";
 import { InspectionModule } from "../components/InspectionModule";
 import { PreviewModule } from "../components/PreviewModule";
@@ -25,6 +26,9 @@ export function SubtitleMeter() {
   const selected =
     project?.cues.find((cue) => cue.id === state.selectedId) ??
     project?.cues[0];
+  const scopedIssues = project
+    ? issuesInRanges(state.issues, project.cues, state.ranges)
+    : state.issues;
 
   const loadDemo = () => {
     const content =
@@ -99,8 +103,8 @@ export function SubtitleMeter() {
               <strong>{tab.label}</strong>
               <small>{tab.hint}</small>
             </span>
-            {tab.id === "inspection" && project && state.issues.length > 0 && (
-              <span className="tab-count">{state.issues.length}</span>
+            {tab.id === "inspection" && project && scopedIssues.length > 0 && (
+              <span className="tab-count">{scopedIssues.length}</span>
             )}
           </button>
         ))}
@@ -161,6 +165,8 @@ export function SubtitleMeter() {
                 vm={vm}
                 selectedId={state.selectedId}
                 zoom={state.zoom}
+                issues={state.issues}
+                ranges={state.ranges}
               />
               <p className="page-tip">
                 选中字幕块可在「问题检查」中编辑文本与精确时间；拖动时间块可整体调整时段。
@@ -177,9 +183,10 @@ export function SubtitleMeter() {
             <div className="module-page inspection-page">
               <InspectionModule
                 cues={project.cues}
-                issues={state.issues}
+                issues={scopedIssues}
                 vm={vm}
                 selectedId={state.selectedId}
+                ranges={state.ranges}
               />
               <PreviewModule cue={selected} />
             </div>
@@ -196,13 +203,14 @@ export function SubtitleMeter() {
                 project={project}
                 vm={vm}
                 phase={state.phase}
+                ranges={state.ranges}
               />
               <section className="module delivery-summary">
                 <span className="module-kicker">EXPORT CHECK</span>
                 <strong>
-                  {state.issues.length === 0
+                  {scopedIssues.length === 0
                     ? "校对完成，可以导出"
-                    : `还有 ${state.issues.length} 项问题待查看`}
+                    : `还有 ${scopedIssues.length} 项问题待查看`}
                 </strong>
                 <button onClick={() => setActiveTab("inspection")}>
                   查看检查结果 <span>→</span>
